@@ -58,7 +58,9 @@ class BookingController extends Controller
                         'type' => $booking->resource->type ?? null,
                     ],
                     
-                    'user_name' => $booking->user->name ?? 'N/A',
+                    'first_name' => $booking->user->first_name ?? 'N/A',
+                    'last_name' => $booking->user->last_name ?? "N/A",
+                    'email' => $booking->user->email
                 ];
             })
         ]);
@@ -323,7 +325,7 @@ class BookingController extends Controller
     private function generateBookingReference()
     {
         do {
-            $reference = 'MZUNI-RBA-' . now()->format('Ydm') . '-' . strtoupper(Str::random(6));
+            $reference = 'MZUNI-RBA-' . now()->format('dmHi') . '-' . strtoupper(Str::random(6));
         } while (Booking::where('booking_reference', $reference)->exists());
 
         return $reference;
