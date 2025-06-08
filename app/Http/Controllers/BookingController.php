@@ -325,7 +325,7 @@ class BookingController extends Controller
     private function generateBookingReference()
     {
         do {
-            $reference = 'MZUNI-RBA-' . now()->format('dmHi') . '-' . strtoupper(Str::random(6));
+            $reference = 'MZUNI-RBA-' . now()->format('dmHi') . '-' . strtoupper(Str::random(4));
         } while (Booking::where('booking_reference', $reference)->exists());
 
         return $reference;
