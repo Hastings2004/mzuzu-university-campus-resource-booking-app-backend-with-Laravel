@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Resource;
 use App\Http\Requests\StoreResourceRequest;
 use App\Http\Requests\UpdateResourceRequest;
+use Illuminate\Support\Facades\Auth;
 
 class ResourceController extends Controller
 {
@@ -36,6 +37,23 @@ class ResourceController extends Controller
     public function store(StoreResourceRequest $request)
     {
         //
+
+        $user = Auth::user();
+        // Ensure the user is authenticated
+        if (!$user || !$user->user_type != 'admin') {
+            return response()->json([
+                "success" => false,
+                "message" => "Unauthorized"
+            ], 401);
+        }
+        // Validate the request using the StoreResourceRequest
+        $validatedData = $request->validated();
+
+        $resource = Resource::create($validatedData);
+        return response()->json([
+            "success" => true,
+            "resource" => $resource
+        ], 201);
     }
 
     /**
@@ -44,6 +62,21 @@ class ResourceController extends Controller
     public function show(Resource $resource)
     {
         //
+        $user = Auth::user();
+        // Ensure the user is authenticated
+        if (!$user) {
+            return response()->json([
+                "success" => false,
+                "message" => "Unauthorized"
+            ], 401);
+        }
+        // No specific role check needed here, as all authenticated users can view resources.
+        if (!$resource) {
+            return response()->json([
+                "success" => false,
+                "message" => "Resource not found"
+            ], 404);
+        }
         return response()->json([
             "success" => true,
             "resource" => $resource
@@ -65,6 +98,22 @@ class ResourceController extends Controller
     public function update(UpdateResourceRequest $request, Resource $resource)
     {
         //
+        $user = Auth::user();
+        // Ensure the user is authenticated and has the 'admin' role
+        if (!$user || !$user->user_type != 'admin') {
+            return response()->json([
+                "success" => false,
+                "message" => "Unauthorized"
+            ], 401);
+        }
+        // Validate the request using the UpdateResourceRequest
+        $validatedData = $request->validated();
+        // Update the resource with the validated data
+        $resource->update($validatedData);
+        return response()->json([
+            "success" => true,
+            "resource" => $resource
+        ]);
     }
 
     /**

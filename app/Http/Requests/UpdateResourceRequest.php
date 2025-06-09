@@ -11,6 +11,11 @@ class UpdateResourceRequest extends FormRequest
      */
     public function authorize(): bool
     {
+        // Check if the user is authenticated and has the 'admin' role
+        $user = $this->user();
+        if ($user && $user->hasRole('admin')) {
+            return true;
+        }
         return false;
     }
 
@@ -23,6 +28,14 @@ class UpdateResourceRequest extends FormRequest
     {
         return [
             //
+
+            "name" => ['sometimes', 'min:10', 'max:100'],
+            "description" => ['sometimes', 'min:15', 'max:255'],
+            "location" => ['sometimes', 'min:10', 'max:100'],
+            "capacity" => ['sometimes', 'min:10', 'numeric'],
+            "status" => ['sometimes', 'in:available,unavailable'],
+            "image" => ['sometimes', 'min:10', 'string']
+
         ];
     }
 }

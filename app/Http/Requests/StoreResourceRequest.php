@@ -12,6 +12,11 @@ class StoreResourceRequest extends FormRequest
      */
     public function authorize(): bool
     {
+        // Check if the user is authenticated and has the 'admin' role
+        $user = $this->user();
+        if ($user && $user->hasRole('admin')) {
+            return true;
+        }
         return Auth::check();
     }
 
