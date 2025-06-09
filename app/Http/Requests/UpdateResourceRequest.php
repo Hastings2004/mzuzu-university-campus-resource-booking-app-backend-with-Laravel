@@ -27,9 +27,8 @@ class UpdateResourceRequest extends FormRequest
     public function rules(): array
     {
         return [
-            //
-
-            "name" => ['sometimes', 'min:10', 'max:100'],
+            //validation rules for updating a resource
+            "name" => ['sometimes', 'min:10', 'max:100', 'alpha'],
             "description" => ['sometimes', 'min:15', 'max:255'],
             "location" => ['sometimes', 'min:10', 'max:100'],
             "capacity" => ['sometimes', 'min:10', 'numeric'],
