@@ -94,10 +94,7 @@ class BinarySearchController extends Controller
         }
 
         // It's often useful to ensure unique results across types if IDs could overlap
-        // However, your formatResults includes 'type' in the formatted data,
-        // so you might want to unique based on a combination like 'type' and 'id'.
-        // For simplicity, unique by the internal 'originalItem.id' from BinarySearchService for now.
-        // Assuming your formatResults correctly adds the 'type' field to the root of the formatted item.
+        
         $uniqueResults = $allResults->unique(function ($item) {
              return $item['type'] . '-' . $item['id'];
         });

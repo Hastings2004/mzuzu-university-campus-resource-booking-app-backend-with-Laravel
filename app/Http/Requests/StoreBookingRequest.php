@@ -31,6 +31,8 @@ class StoreBookingRequest extends FormRequest
             'end_time' => 'required|date|after:start_time',
             'status' => 'string|in:approved,pending,rejected',
             'purpose' => 'required|string|max:500',
+            //'booking_type' => ['in:staff_meeting,class,student_meeting,university_activity,other'], // New field
+     
         ];
     }
 }
