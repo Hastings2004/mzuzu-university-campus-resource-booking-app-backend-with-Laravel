@@ -46,7 +46,7 @@ class UpdatePasswordRequest extends FormRequest
                     ->mixedCase()
                     ->numbers()
                     ->symbols()
-                    ->uncompromised(), // Check against compromised passwords
+                    ->uncompromised(), 
                 'confirmed', // Ensures 'password_confirmation' field matches
                 'different:current_password', // New password must be different from the current one
             ],

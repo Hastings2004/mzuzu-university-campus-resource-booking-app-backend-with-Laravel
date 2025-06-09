@@ -24,6 +24,12 @@ class UpdateBookingRequest extends FormRequest
     {
         return [
             //
+            'booking_reference' => 'nullable|string|max:255',
+            'resource_id' => 'required|exists:resources,id',
+            'start_time' => 'required|date|after_or_equal:now',
+            'end_time' => 'required|date|after:start_time',
+            'status' => 'string|in:approved,pending,rejected',
+            'purpose' => 'required|string|max:500',
                    
         ];
     }
