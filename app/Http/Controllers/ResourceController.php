@@ -14,6 +14,16 @@ class ResourceController extends Controller
      */
     public function index()
     { 
+        $user = Auth::user();
+
+        // Ensure the user is authenticated
+
+        if(!$user) {
+            return response()->json([
+                "success" => false,
+                "message" => "Unauthorized"
+            ], 401);
+        }
         // No specific role check needed here, as all authenticated users can view resources.
         $resources = Resource::all();
         
