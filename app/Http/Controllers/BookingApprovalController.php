@@ -27,6 +27,13 @@ class BookingApprovalController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
+        $user = Auth::user();
+        if (!$user || !$user->user_type != 'admin') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized access'
+            ], 403);
+        }
         try {
             $perPage = $request->get('per_page', 15);
             $status = $request->get('status', 'pending');
@@ -55,6 +62,14 @@ class BookingApprovalController extends Controller
      */
     public function approve(Request $request, $id): JsonResponse
     {
+        $user = Auth::user();
+        if (!$user || !$user->user_type != 'admin') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized access'
+            ], 403);
+        }
+        // Validate request data
         try {
             $request->validate([
                 'notes' => 'nullable|string|max:500'
@@ -118,6 +133,14 @@ class BookingApprovalController extends Controller
      */
     public function reject(Request $request, $id): JsonResponse
     {
+        $user = Auth::user();
+        if (!$user || !$user->user_type != 'admin') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized access'
+            ], 403);
+        }
+        // Validate request data
         try {
             $request->validate([
                 'reason' => 'required|string|max:500'
@@ -182,6 +205,14 @@ class BookingApprovalController extends Controller
      */
     public function cancel(Request $request, $id): JsonResponse
     {
+        $user = Auth::user();
+        if (!$user || !$user->user_type != 'admin') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized access'
+            ], 403);
+        }
+
         try {
             $request->validate([
                 'reason' => 'required|string|max:500',
@@ -277,6 +308,14 @@ class BookingApprovalController extends Controller
      */
     public function bulkApprove(Request $request): JsonResponse
     {
+        $user = Auth::user();
+        if (!$user || !$user->user_type != 'admin') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized access'
+            ], 403);
+        }
+        // Validate request data
         try {
             $request->validate([
                 'booking_ids' => 'required|array|min:1',

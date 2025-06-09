@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BinarySearchController;
+use App\Http\Controllers\BookingApprovalController;
 use App\Http\Controllers\BookingController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Reservation;
@@ -32,6 +33,15 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/bookings/cancellable', [BookingController::class, 'getCancellableBookings']);
     Route::get('/bookings/{booking}/can-cancel', [BookingController::class, 'checkCancellationEligibility']);
     Route::post('/reservations', [Reservation::class, 'store']);   
+});
+
+Route::middleware(['auth', 'admin'])->group(function () {
+    Route::get('/bookings/approval', [BookingApprovalController::class, 'index']);
+    Route::get('/bookings/{id}/approval', [BookingApprovalController::class, 'show']);
+    Route::post('/bookings/{id}/approve', [BookingApprovalController::class, 'approve']);
+    Route::post('/bookings/{id}/reject', [BookingApprovalController::class, 'reject']);
+    Route::post('/bookings/{id}/cancel', [BookingApprovalController::class, 'cancel']);
+    Route::post('/bookings/bulk-approve', [BookingApprovalController::class, 'bulkApprove']);
 });
 
 Route::prefix('search')->group(function () {
