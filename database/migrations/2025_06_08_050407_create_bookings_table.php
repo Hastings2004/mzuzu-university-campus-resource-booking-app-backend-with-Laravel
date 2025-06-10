@@ -33,7 +33,7 @@ return new class extends Migration
                 'class',
                 'other',
             ]); // New field for booking type
-            $table->integer('priority')->default(0); // New field for priority
+            $table->integer('priority'); // New field for priority
             $table->timestamp('expires_at')->nullable();
             $table->timestamp('cancelled_at')->nullable();
             $table->text('cancellation_reason')->nullable();                        
