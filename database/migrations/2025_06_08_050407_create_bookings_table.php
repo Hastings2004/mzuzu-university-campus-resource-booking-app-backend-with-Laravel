@@ -18,8 +18,22 @@ return new class extends Migration
             $table->foreignId('resource_id')->constrained()->cascadeOnDelete();
             $table->dateTime("start_time");
             $table->dateTime("end_time");
-            $table->string("status")->default('approved');
+            $table->enum("status", [
+                'approved',
+                'pending',
+                'cancelled',
+                'expired',
+                'completed'
+            ])->default('approved');
             $table->string("purpose");
+            $table->enum('booking_type', [
+                'university_activity',
+                'staff_meeting',
+                'student_meeting',
+                'class',
+                'other',
+            ]); // New field for booking type
+            $table->integer('priority')->default(0); // New field for priority
             $table->timestamp('expires_at')->nullable();
             $table->timestamp('cancelled_at')->nullable();
             $table->text('cancellation_reason')->nullable();

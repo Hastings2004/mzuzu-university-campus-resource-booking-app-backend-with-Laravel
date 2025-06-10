@@ -175,11 +175,11 @@ class AuthController extends Controller
             return response()->json(['message' => 'Unauthorized: User not authenticated.'], 401);
         }
 
-        if ($user->hasVerifiedEmail()) {
-            return response()->json(['message' => 'Email already verified.'], 200);
-        }
+        // if ($user->hasVerifiedEmail()) {
+        //     return response()->json(['message' => 'Email already verified.'], 200);
+        // }
 
-        $user->sendEmailVerificationNotification();
+        // $user->sendEmailVerificationNotification();
 
         return response()->json(['message' => 'Verification email sent! Please check your inbox.'], 200);
     }
