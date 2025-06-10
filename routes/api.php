@@ -10,6 +10,7 @@ use App\Http\Controllers\ResourceController;
 use App\Http\Controllers\UserController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Auth;
 
 Route::get('/user', function (Request $request) {
     return $request->user();
@@ -35,14 +36,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/reservations', [Reservation::class, 'store']);   
 });
 
-Route::middleware(['auth', 'admin'])->group(function () {
-    Route::get('/bookings/approval', [BookingApprovalController::class, 'index']);
-    Route::get('/bookings/{id}/approval', [BookingApprovalController::class, 'show']);
-    Route::post('/bookings/{id}/approve', [BookingApprovalController::class, 'approve']);
-    Route::post('/bookings/{id}/reject', [BookingApprovalController::class, 'reject']);
-    Route::post('/bookings/{id}/cancel', [BookingApprovalController::class, 'cancel']);
-    Route::post('/bookings/bulk-approve', [BookingApprovalController::class, 'bulkApprove']);
-});
+// Route::middleware(['auth', 'admin'])->group(function () {
+//     Route::get('/bookings/approval', [BookingApprovalController::class, 'index']);
+//     Route::get('/bookings/{id}/approval', [BookingApprovalController::class, 'show']);
+//     Route::post('/bookings/{id}/approve', [BookingApprovalController::class, 'approve']);
+//     Route::post('/bookings/{id}/reject', [BookingApprovalController::class, 'reject']);
+//     Route::post('/bookings/{id}/cancel', [BookingApprovalController::class, 'cancel']);
+//     Route::post('/bookings/bulk-approve', [BookingApprovalController::class, 'bulkApprove']);
+// });
 
 Route::prefix('search')->group(function () {
     Route::post('/', [BinarySearchController::class, 'search']);
@@ -51,7 +52,16 @@ Route::prefix('search')->group(function () {
     Route::delete('/cache', [BinarySearchController::class, 'clearCache']);
     Route::post('/perform-multi-search', [BinarySearchController::class, 'performMultiSearch']);
 });
+$user = Auth::user();
 
+$admin = $user && $user->user_type === 'admin'; // Check if the user is an admin
+Route::middleware(['auth:sanctum', $admin])->group(function () { // Make sure 'admin' middleware is correctly applied
+    Route::post('/bookings/{id}/approve', [BookingApprovalController::class, 'approve']);
+    Route::post('/bookings/{id}/reject', [BookingApprovalController::class, 'reject']);
+    Route::post('/bookings/{id}/cancel', [BookingApprovalController::class, 'cancel']); // For specific cancellation logic
+    Route::delete('/bookings/{id}', [BookingController::class, 'destroy']); // Assuming a general delete in a different controller or here if you want a hard delete by admin
+    Route::post('/bookings/bulk-approve', [BookingApprovalController::class, 'bulkApprove']);
+});
  
 
 

@@ -16,7 +16,7 @@ class AuthController extends Controller
             'first_name'=> 'required|alpha|max:255',
             'last_name'=> 'required|alpha|max:255',
             'user_type'=> 'required',
-            'email'=> 'required|max:255|email|unique:users',
+            'email'=> 'required|max:255|email|unique:users|regex:/^[a-z]{4,8}[0-9]{4,5}+@my\.mzuni\.ac\.mw$/',
             'password'=> 'required|confirmed|min:6',
         ]);
 

@@ -652,6 +652,18 @@ class BookingController extends Controller
             return response()->json(['message' => 'Unauthenticated.'], 401);
         }
 
+        if($user->user_type == 'admin') {
+            // If the user is an admin, return all bookings
+            $bookings = Booking::with(['resource', 'user'])
+                ->orderBy('created_at', 'desc')
+                ->get();
+
+            return response()->json([
+                'success' => true,
+                "bookings" => $bookings
+            ]);
+        } 
+
         $bookings = $request-> user() ->bookings()
             ->with(['resource', 'user'])
             ->orderBy('created_at', 'desc')
