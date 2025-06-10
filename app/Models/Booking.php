@@ -180,4 +180,23 @@ class Booking extends Model
     {
         return $query->where('end_time', '>', Carbon::now());
     }
+    public function scopeNotStarted($query)
+    {
+        return $query->where('start_time', '>', Carbon::now());
+    }
+    public function scopeCancellable($query)
+    {
+        return $query->where('status', self::STATUS_APPROVED)
+                     ->orWhere('status', self::STATUS_PENDING)
+                     ->where('start_time', '>', Carbon::now());
+    }
+    /**
+     * Get the payment associated with the booking.
+     */
+    // This assumes a one-to-one relationship with Payment   
+
+    public function payment()
+    {
+        return $this->hasOne(Payment::class);
+    }
 }
