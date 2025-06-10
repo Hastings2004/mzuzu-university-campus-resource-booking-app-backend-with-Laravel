@@ -118,7 +118,7 @@ class Booking extends Model
         'status',
         'purpose',
         'booking_type',     // New
-        'priority_level',   // New
+        'priority',   // New
         'cancelled_at',
         'cancellation_reason',
     ];

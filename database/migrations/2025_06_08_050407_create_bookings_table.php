@@ -36,8 +36,7 @@ return new class extends Migration
             $table->integer('priority')->default(0); // New field for priority
             $table->timestamp('expires_at')->nullable();
             $table->timestamp('cancelled_at')->nullable();
-            $table->text('cancellation_reason')->nullable();
-                        
+            $table->text('cancellation_reason')->nullable();                        
             $table->index(['user_id', 'status']);
             $table->index(['expires_at']);
             $table->timestamps();

@@ -397,7 +397,7 @@ class BookingService
                 "status" => "approved", // New high-priority booking is approved immediately
                 "purpose" => $data['purpose'],
                 "booking_type" => $data['booking_type'],
-                "priority_level" => $newBookingPriority,
+                "priority" => $newBookingPriority,
             ]);
 
             // Notify the user who made the new booking
@@ -415,7 +415,7 @@ class BookingService
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Booking creation failed: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
-            return ['success' => false, 'message' => 'An error occurred while creating the booking.', 'status_code' => 500];
+             return ['success' => false, 'message' => 'An error occurred while creating the booking.', 'status_code' => 500];
         }
     }
 
