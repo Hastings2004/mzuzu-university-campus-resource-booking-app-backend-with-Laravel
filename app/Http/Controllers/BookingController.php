@@ -645,6 +645,7 @@ class BookingController extends Controller
     /**
      * Display a listing of user's bookings
      */
+    
     public function index(Request $request): JsonResponse
     {
         $user = Auth::user();
@@ -652,20 +653,39 @@ class BookingController extends Controller
             return response()->json(['message' => 'Unauthenticated.'], 401);
         }
 
-        if($user->user_type == 'admin') {
-            // If the user is an admin, return all bookings
-            $bookings = Booking::with(['resource', 'user'])
-                ->orderBy('created_at', 'desc')
-                ->get();
+        // --- NEW: Retrieve Filter and Sort Parameters ---
+        $priority = $request->query('priority');
+        $order = $request->query('order', 'desc'); 
+
+        // Validate and sanitize sort direction to prevent SQL injection
+        $sortDirection = in_array(strtolower($order), ['asc', 'desc']) ? strtolower($order) : 'desc';
+        
+        // Start with a base query for all bookings
+        $baseQuery = Booking::with(['resource', 'user']);
+
+        // Apply Priority Filter if present and valid
+        if ($priority && in_array($priority, ['low', 'medium', 'high'])) {
+            $baseQuery->where('priority', $priority);
+        }
+
+        // Apply Sorting Order
+        $baseQuery->orderBy('created_at', $sortDirection);
+        
+        if ($user->user_type == 'admin') {
+            // If the user is an admin, apply filters/sorts to all bookings
+            $bookings = $baseQuery->get();
 
             return response()->json([
                 'success' => true,
                 "bookings" => $bookings
             ]);
-        } 
+        }
 
-        $bookings = $request-> user() ->bookings()
+
+        // For non-admin users, get only bookings where 'end_time' is past the current time
+        $bookings = $request->user()->bookings()
             ->with(['resource', 'user'])
+            ->where('end_time', '>', Carbon::now()) // Filter: end_time is less than current time
             ->orderBy('created_at', 'desc')
             ->get();
 
@@ -681,8 +701,8 @@ class BookingController extends Controller
                     'end_time' => $booking->end_time->toISOString(),
                     'status' => $booking->status,
                     'purpose' => $booking->purpose,
-                    'booking_type' => $booking->booking_type, // Include booking type
-                    'priority_level' => $booking->priority_level, // Include priority level
+                    'booking_type' => $booking->booking_type,
+                    'priority_level' => $booking->priority_level,
                     'created_at' => $booking->created_at->toISOString(),
                     'resource' => [
                         'id' => $booking->resource->id,
