@@ -8,6 +8,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Reservation;
 use App\Http\Controllers\ResourceController;
 use App\Http\Controllers\UserController;
+use Illuminate\Foundation\Auth\EmailVerificationRequest;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Auth;
@@ -33,7 +34,29 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('/bookings/{booking}/cancel', [BookingController::class, 'cancelBooking']);
     Route::get('/bookings/cancellable', [BookingController::class, 'getCancellableBookings']);
     Route::get('/bookings/{booking}/can-cancel', [BookingController::class, 'checkCancellationEligibility']);
-    Route::post('/reservations', [Reservation::class, 'store']);   
+    Route::post('/reservations', [Reservation::class, 'store']); 
+
+    // Route::get('/email/verify', [AuthController::class, 'verifyNotice']); // Throttle to prevent abuse
+
+    // Route::get('/email/verify/{id}/{hash}', [AuthController::class, 'verifyEmail'])->middleware(['signed', 'throttle:6,1'])->name('verification.verify');
+
+    // Route::post('/email/verification-notification', [AuthController::class, 'sendVerificationEmail'])
+    //     ->middleware(['auth:sanctum', 'throttle:6,1'])
+    //     ->name('verification.send');
+
+    Route::get('/email/verify/{id}/{hash}', [AuthController::class, 'verifyEmail'])
+        ->middleware(['signed', 'throttle:6,1']) // 'signed' middleware validates the URL signature
+        ->name('verification.verify');
+
+    // Route to resend verification email
+    Route::post('/email/verification-notification', [AuthController::class, 'sendVerificationEmail'])
+        ->middleware(['auth:sanctum', 'throttle:6,1']) // Auth and throttle to prevent abuse
+        ->name('verification.send');
+
+
+    Route::post('/resend-verification-email', [AuthController::class, 'resendVerificationPublic']);
+
+    
 });
 
 // Route::middleware(['auth', 'admin'])->group(function () {
