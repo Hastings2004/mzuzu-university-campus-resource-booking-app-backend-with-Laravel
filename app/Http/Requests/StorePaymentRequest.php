@@ -23,7 +23,12 @@ class StorePaymentRequest extends FormRequest
     public function rules(): array
     {
         return [
-            //
+            //payment rules
+            'booking_id' => 'required|exists:bookings,id',
+            'amount' => 'required|numeric|min:0.01',
+            'payment_method' => 'required|string|in:credit_card,bank_transfer',
+            'transaction_id' => 'required|string|unique:payments,transaction_id',
+            'status' => 'required|in:pending,completed,failed',
         ];
     }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Foundation\Http\FormRequest;
 
 class UpdatePaymentRequest extends FormRequest
@@ -11,7 +12,7 @@ class UpdatePaymentRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return false;
+        return Auth::check();
     }
 
     /**
@@ -23,6 +24,11 @@ class UpdatePaymentRequest extends FormRequest
     {
         return [
             //
+            'booking_id' => 'required|exists:bookings,id',
+            'amount' => 'required|numeric|min:0.01',
+            'payment_method' => 'required|string|in:credit_card,bank_transfer',
+            'transaction_id' => 'required|string|unique:payments,transaction_id,' . $this->route('payment'), // Allow updating the same transaction ID
+            'status' => 'required|in:pending,completed,failed',
         ];
     }
 }
