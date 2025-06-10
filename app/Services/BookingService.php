@@ -245,6 +245,8 @@
 
 // app/Services/BookingService.php
 
+// app/Services/BookingService.php
+
 namespace App\Services; // Make sure this namespace is correct, typically App\Services
 
 use App\Models\Booking;
@@ -322,7 +324,7 @@ class BookingService
     {
         DB::beginTransaction();
 
-        //try {
+        try {
             $resource = Resource::find($data['resource_id']);
             if (!$resource) {
                 DB::rollBack();
@@ -338,7 +340,7 @@ class BookingService
             $endTime = Carbon::parse($data['end_time']);
 
             // Determine priority for the new booking
-            $newBookingPriority = $this->determinePriority($user,'university_activity'); // Assuming 'university_activity' is the booking type
+            $newBookingPriority = $this->determinePriority($user, $data['booking_type']);
 
             $conflictingBookings = $this->findConflictingBookings(
                 $data['resource_id'],
@@ -394,7 +396,7 @@ class BookingService
                 "end_time" => $endTime,
                 "status" => "approved", // New high-priority booking is approved immediately
                 "purpose" => $data['purpose'],
-                "booking_type" => 'university_activity', // Assuming this is the type for the new booking
+                "booking_type" => $data['booking_type'],
                 "priority_level" => $newBookingPriority,
             ]);
 
@@ -410,11 +412,11 @@ class BookingService
                 'status_code' => 201
             ];
 
-        // } catch (\Exception $e) {
-        //     DB::rollBack();
-        //     Log::error('Booking creation failed: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
-        //     return ['success' => false, 'message' => 'An error occurred while creating the booking.', 'status_code' => 500];
-        // }
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Booking creation failed: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
+            return ['success' => false, 'message' => 'An error occurred while creating the booking.', 'status_code' => 500];
+        }
     }
 
     /**

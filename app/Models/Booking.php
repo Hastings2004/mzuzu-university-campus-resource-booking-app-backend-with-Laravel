@@ -117,7 +117,7 @@ class Booking extends Model
         'end_time',
         'status',
         'purpose',
-        'booking_type' => 'university_activity',     // New
+        'booking_type',     // New
         'priority_level',   // New
         'cancelled_at',
         'cancellation_reason',
