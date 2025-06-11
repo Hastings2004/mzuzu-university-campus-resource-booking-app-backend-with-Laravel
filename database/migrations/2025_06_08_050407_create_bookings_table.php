@@ -23,6 +23,8 @@ return new class extends Migration
                 'pending',
                 'cancelled',
                 'expired',
+                'rejected',
+                'in user',
                 'completed'
             ])->default('approved');
             $table->string("purpose");
