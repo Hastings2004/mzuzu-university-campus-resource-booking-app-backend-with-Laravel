@@ -324,7 +324,7 @@ class BookingService
     {
         DB::beginTransaction();
 
-        try {
+        //try {
             $resource = Resource::find($data['resource_id']);
             if (!$resource) {
                 DB::rollBack();
@@ -412,11 +412,11 @@ class BookingService
                 'status_code' => 201
             ];
 
-        } catch (\Exception $e) {
-            DB::rollBack();
-            Log::error('Booking creation failed: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
-             return ['success' => false, 'message' => 'An error occurred while creating the booking.', 'status_code' => 500];
-        }
+        // } catch (\Exception $e) {
+        //     DB::rollBack();
+        //     Log::error('Booking creation failed: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
+        //      return ['success' => false, 'message' => 'An error occurred while creating the booking.', 'status_code' => 500];
+        // }
     }
 
     /**

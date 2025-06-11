@@ -720,6 +720,121 @@ class BookingController extends Controller
         ]);
     }
 
+    /**
+     * checking availability.
+     */
+
+    public function checkAvailability(Request $request)
+    {
+        $request->validate([
+            'resource_id' => 'required|exists:resources,id',
+            'start_time' => 'required|date',
+            'end_time' => 'required|date|after:start_time',
+            'exclude_booking_id' => 'sometimes|nullable|exists:bookings,id', // Add this validation
+        ]);
+
+        $resourceId = $request->input('resource_id');
+        $startTime = Carbon::parse($request->input('start_time'));
+        $endTime = Carbon::parse($request->input('end_time'));
+        $excludeBookingId = $request->input('exclude_booking_id'); // Get the ID
+
+        // Retrieve resource capacity
+        $resource = Resource::find($resourceId);
+        if (!$resource) {
+            return response()->json(['message' => 'Resource not found.'], 404);
+        }
+        $resourceCapacity = $resource->capacity ?? 1; // Default to 1 if capacity is not set
+
+        // Call the modified private function
+        $conflictResult = $this->checkBookingConflicts(
+            $resourceId,
+            $startTime,
+            $endTime,
+            $resourceCapacity,
+            $excludeBookingId // Pass the exclude ID
+        );
+
+        if ($conflictResult['hasConflict']) {
+            return response()->json([
+                'success' => false, // Explicitly false for API consistency
+                'message' => $conflictResult['message'],
+                'conflicts' => $conflictResult['conflicts'] ?? [] // Return conflicts if any
+            ], 409); // Use 409 Conflict status code
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Time slot is available.',
+            'conflicts' => []
+        ], 200);
+    }
+
+    /**
+     * Check for booking conflicts for a resource and time slot.
+     */
+    private function checkBookingConflicts($resourceId, Carbon $startTime, Carbon $endTime, $resourceCapacity = 1, $excludeBookingId = null)
+    {
+        $conflictingBookingsQuery = Booking::where('resource_id', $resourceId)
+            ->whereIn('status', ['pending', 'approved'])
+            ->where(function ($query) use ($startTime, $endTime) {
+                $query->where(function ($q) use ($startTime, $endTime) {
+                    $q->where('start_time', '<', $endTime)
+                      ->where('end_time', '>', $startTime);
+                });
+            });
+
+        if ($excludeBookingId) {
+            $conflictingBookingsQuery->where('id', '!=', $excludeBookingId);
+        }
+
+        $conflictingBookings = $conflictingBookingsQuery->with(['user:id,first_name,last_name,email'])->get();
+        $conflictCount = $conflictingBookings->count();
+
+        if ($resourceCapacity == 1 && $conflictCount > 0) {
+            return [
+                'available' => false,
+                'hasConflict' => true,
+                'message' => 'Resource is already booked during this time.',
+                'conflicts' => $conflictingBookings->map(function ($booking) {
+                    return [
+                        'id' => $booking->id,
+                        'start_time' => $booking->start_time->format('Y-m-d H:i'),
+                        'end_time' => $booking->end_time->format('Y-m-d H:i'),
+                        'user' => $booking->user ? ($booking->user->first_name . ' ' . $booking->user->last_name) : 'Unknown',
+                        'priority_level' => $booking->priority_level ?? null,
+                    ];
+                })
+            ];
+        }
+
+        if ($conflictCount >= $resourceCapacity) {
+            return [
+                'available' => false,
+                'hasConflict' => true,
+                'message' => sprintf(
+                    'Resource capacity (%d) is fully booked for the selected time period.',
+                    $resourceCapacity
+                ),
+                'conflicts' => $conflictingBookings->map(function ($booking) {
+                    return [
+                        'id' => $booking->id,
+                        'start_time' => $booking->start_time->format('Y-m-d H:i'),
+                        'end_time' => $booking->end_time->format('Y-m-d H:i'),
+                        'user' => $booking->user ? ($booking->user->first_name . ' ' . $booking->user->last_name) : 'Unknown',
+                        'priority_level' => $booking->priority_level ?? null,
+                    ];
+                })
+            ];
+        }
+
+        return [
+            'available' => true,
+            'hasConflict' => false,
+            'message' => 'Time slot is available',
+            'conflicts' => []
+        ];
+    }
+
     public function getUserBookings(Request $request)
      {
          try {
