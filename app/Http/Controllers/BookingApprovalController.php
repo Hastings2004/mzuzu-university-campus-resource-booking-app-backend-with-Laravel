@@ -2,54 +2,78 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Controllers\Controller;
-use App\Models\Booking;
+use Illuminate\Routing\Controller;
+use App\Models\Booking; 
+use App\Services\BookingApprovalService; 
+use App\Exceptions\BookingApprovalException; 
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 
 class BookingApprovalController extends Controller
 {
+    protected $bookingApprovalService;
+
     /**
      * Create a new controller instance.
+     *
+     * @param BookingApprovalService $bookingApprovalService
      */
-    public function __construct()
+    public function __construct(BookingApprovalService $bookingApprovalService)
     {
-        // $this->middleware('auth');
-        // $this->middleware('admin'); // Assuming you have admin middleware
+        // Inject the BookingApprovalService to handle business logic
+        $this->bookingApprovalService = $bookingApprovalService;
+        
+        // Apply middleware to ensure only authenticated users can access these routes
+        $this->middleware('auth:sanctum'); 
+        
+        // Middleware to check if the user is an admin
+        $this->middleware(function ($request, $next) {
+            if (!Auth::user() || !(Auth::user()->user_type === 'admin' || Auth::user()->role?->name === 'admin')) {
+                 return response()->json(['message' => 'Unauthorized access'], 403);
+            }
+            return $next($request);
+        });
     }
 
     /**
-     * Get all pending bookings for approval
+     * Get all bookings for approval (or other statuses based on filter).
+     *
+     * @param Request $request
+     * @return JsonResponse
      */
     public function index(Request $request): JsonResponse
     {
         $user = Auth::user();
-        if (!$user || !$user->user_type != 'admin') {
+        // Authorization check
+        if (!$user || !($user->user_type === 'admin' || $user->role?->name === 'admin')) {
             return response()->json([
                 'success' => false,
                 'message' => 'Unauthorized access'
             ], 403);
         }
+
         try {
-            $perPage = $request->get('per_page', 15);
-            $status = $request->get('status', 'pending');
-            
-            $bookings = Booking::with(['user', 'service']) // Adjust relationships as needed
-                ->where('status', $status)
-                ->orderBy('created_at', 'desc')
-                ->paginate($perPage);
+            $status = $request->query('status', Booking::STATUS_PENDING); // Default to 'pending'
+            $perPage = (int) $request->query('per_page', 15);
+            $filters = $request->only(['resource_id', 'user_id']); // Extract other filters
+
+            $bookings = $this->bookingApprovalService->getBookingsForApproval($status, $perPage, $filters);
 
             return response()->json([
                 'success' => true,
                 'data' => $bookings,
                 'message' => 'Bookings retrieved successfully'
             ]);
+        } catch (BookingApprovalException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage()
+            ], $e->getCode() ?: 500);
         } catch (\Exception $e) {
-            Log::error('Error fetching bookings: ' . $e->getMessage());
+            Log::error('BookingApprovalController@index failed: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to fetch bookings'
@@ -58,69 +82,51 @@ class BookingApprovalController extends Controller
     }
 
     /**
-     * Approve a booking
+     * Approve a specific booking.
+     *
+     * @param Request $request
+     * @param int $id Booking ID.
+     * @return JsonResponse
      */
-    public function approve(Request $request, $id): JsonResponse
+    public function approve(Request $request, int $id): JsonResponse
     {
         $user = Auth::user();
-        if (!$user || !$user->user_type != 'admin') {
+        if (!$user || !($user->user_type === 'admin' || $user->role?->name === 'admin')) {
             return response()->json([
                 'success' => false,
                 'message' => 'Unauthorized access'
             ], 403);
         }
-        // Validate request data
+
         try {
-            $request->validate([
+            $validatedData = $request->validate([
                 'notes' => 'nullable|string|max:500'
             ]);
 
-            DB::beginTransaction();
-
-            $booking = Booking::findOrFail($id);
-
-            // Check if booking can be approved
-            if ($booking->status !== 'pending') {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Only pending bookings can be approved'
-                ], 400);
-            }
-
-            // Update booking status
-            $booking->update([
-                'status' => 'approved',
-                'approved_by' => Auth::id(),
-                'approved_at' => now(),
-                'admin_notes' => $request->notes
-            ]);
-
-            // Log the approval
-            Log::info("Booking {$id} approved by admin " . Auth::id());
-
-            // You can add additional logic here such as:
-            // - Send notification to customer
-            // - Send confirmation email
-            // - Update related resources/schedules
-            // - Trigger webhooks
-
-            DB::commit();
+            $approvedBooking = $this->bookingApprovalService->approveBooking(
+                $id,
+                $user->id,
+                $validatedData['notes'] ?? null
+            );
 
             return response()->json([
                 'success' => true,
-                'data' => $booking->fresh(['user', 'service']),
+                'data' => $approvedBooking,
                 'message' => 'Booking approved successfully'
             ]);
-
         } catch (ValidationException $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Validation failed',
                 'errors' => $e->errors()
             ], 422);
+        } catch (BookingApprovalException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage()
+            ], $e->getCode() ?: 400); // Bad Request for business logic errors, or 404 for not found
         } catch (\Exception $e) {
-            DB::rollBack();
-            Log::error('Error approving booking: ' . $e->getMessage());
+            Log::error('BookingApprovalController@approve failed: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to approve booking'
@@ -129,70 +135,53 @@ class BookingApprovalController extends Controller
     }
 
     /**
-     * Reject a booking
+     * Reject a specific booking.
+     *
+     * @param Request $request
+     * @param int $id Booking ID.
+     * @return JsonResponse
      */
-    public function reject(Request $request, $id): JsonResponse
+    public function reject(Request $request, int $id): JsonResponse
     {
         $user = Auth::user();
-        if (!$user || !$user->user_type != 'admin') {
+        if (!$user || !($user->user_type === 'admin' || $user->role?->name === 'admin')) {
             return response()->json([
                 'success' => false,
                 'message' => 'Unauthorized access'
             ], 403);
         }
-        // Validate request data
+
         try {
-            $request->validate([
-                'reason' => 'required|string|max:500'
+            $validatedData = $request->validate([
+                'reason' => 'required|string|max:500',
+                'notes' => 'nullable|string|max:500'
             ]);
 
-            DB::beginTransaction();
-
-            $booking = Booking::findOrFail($id);
-
-            // Check if booking can be rejected
-            if (!in_array($booking->status, ['pending', 'approved'])) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Only pending or approved bookings can be rejected'
-                ], 400);
-            }
-
-            // Update booking status
-            $booking->update([
-                'status' => 'rejected',
-                'rejected_by' => Auth::id(),
-                'rejected_at' => now(),
-                'rejection_reason' => $request->reason,
-                'admin_notes' => $request->notes ?? null
-            ]);
-
-            // Log the rejection
-            Log::info("Booking {$id} rejected by admin " . Auth::id());
-
-            // Additional logic for rejection:
-            // - Send notification to customer
-            // - Process refund if payment was made
-            // - Free up reserved resources/time slots
-            // - Send rejection email with reason
-
-            DB::commit();
+            $rejectedBooking = $this->bookingApprovalService->rejectBooking(
+                $id,
+                $user->id,
+                $validatedData['reason'],
+                $validatedData['notes'] ?? null
+            );
 
             return response()->json([
                 'success' => true,
-                'data' => $booking->fresh(['user', 'service']),
+                'data' => $rejectedBooking,
                 'message' => 'Booking rejected successfully'
             ]);
-
         } catch (ValidationException $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Validation failed',
                 'errors' => $e->errors()
             ], 422);
+        } catch (BookingApprovalException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage()
+            ], $e->getCode() ?: 400);
         } catch (\Exception $e) {
-            DB::rollBack();
-            Log::error('Error rejecting booking: ' . $e->getMessage());
+            Log::error('BookingApprovalController@reject failed: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to reject booking'
@@ -201,12 +190,16 @@ class BookingApprovalController extends Controller
     }
 
     /**
-     * Cancel a booking
+     * Cancel a specific booking by an admin.
+     *
+     * @param Request $request
+     * @param int $id Booking ID.
+     * @return JsonResponse
      */
-    public function cancel(Request $request, $id): JsonResponse
+    public function cancel(Request $request, int $id): JsonResponse
     {
         $user = Auth::user();
-        if (!$user || !$user->user_type != 'admin') {
+        if (!$user || !($user->user_type === 'admin' || $user->role?->name === 'admin')) {
             return response()->json([
                 'success' => false,
                 'message' => 'Unauthorized access'
@@ -214,60 +207,38 @@ class BookingApprovalController extends Controller
         }
 
         try {
-            $request->validate([
+            $validatedData = $request->validate([
                 'reason' => 'required|string|max:500',
-                'refund_amount' => 'nullable|numeric|min:0'
+                'refund_amount' => 'nullable|numeric|min:0',
+                'notes' => 'nullable|string|max:500'
             ]);
 
-            DB::beginTransaction();
-
-            $booking = Booking::findOrFail($id);
-
-            // Check if booking can be cancelled
-            if (in_array($booking->status, ['cancelled', 'completed'])) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Cannot cancel a booking that is already cancelled or completed'
-                ], 400);
-            }
-
-            // Update booking status
-            $booking->update([
-                'status' => 'cancelled',
-                'cancelled_by' => Auth::id(),
-                'cancelled_at' => now(),
-                'cancellation_reason' => $request->reason,
-                'refund_amount' => $request->refund_amount,
-                'admin_notes' => $request->notes ?? null
-            ]);
-
-            // Log the cancellation
-            Log::info("Booking {$id} cancelled by admin " . Auth::id());
-
-            // Additional logic for cancellation:
-            // - Process refund if applicable
-            // - Send notification to customer
-            // - Free up reserved resources/time slots
-            // - Send cancellation email
-            // - Update inventory/availability
-
-            DB::commit();
+            $cancelledBooking = $this->bookingApprovalService->cancelBookingByAdmin(
+                $id,
+                $user->id,
+                $validatedData['reason'],
+                $validatedData['refund_amount'] ?? null,
+                $validatedData['notes'] ?? null
+            );
 
             return response()->json([
                 'success' => true,
-                'data' => $booking->fresh(['user', 'service']),
+                'data' => $cancelledBooking,
                 'message' => 'Booking cancelled successfully'
             ]);
-
         } catch (ValidationException $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Validation failed',
                 'errors' => $e->errors()
             ], 422);
+        } catch (BookingApprovalException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage()
+            ], $e->getCode() ?: 400);
         } catch (\Exception $e) {
-            DB::rollBack();
-            Log::error('Error cancelling booking: ' . $e->getMessage());
+            Log::error('BookingApprovalController@cancel failed: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to cancel booking'
@@ -276,46 +247,59 @@ class BookingApprovalController extends Controller
     }
 
     /**
-     * Get booking details for approval review
+     * Get booking details for approval review.
+     *
+     * @param int $id Booking ID.
+     * @return JsonResponse
      */
-    public function show($id): JsonResponse
+    public function show(int $id): JsonResponse
     {
+        $user = Auth::user();
+        if (!$user || !($user->user_type === 'admin' || $user->role?->name === 'admin')) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized access'
+            ], 403);
+        }
+
         try {
-            $booking = Booking::with([
-                'user',
-                'service',
-                'approvedBy',
-                'rejectedBy',
-                'cancelledBy'
-            ])->findOrFail($id);
+            $booking = $this->bookingApprovalService->getBookingDetails($id);
 
             return response()->json([
                 'success' => true,
                 'data' => $booking,
                 'message' => 'Booking details retrieved successfully'
             ]);
-        } catch (\Exception $e) {
-            Log::error('Error fetching booking details: ' . $e->getMessage());
+        } catch (BookingApprovalException $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Booking not found'
-            ], 404);
+                'message' => $e->getMessage()
+            ], $e->getCode() ?: 404);
+        } catch (\Exception $e) {
+            Log::error('BookingApprovalController@show failed: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to retrieve booking details'
+            ], 500);
         }
     }
 
     /**
-     * Bulk approve bookings
+     * Bulk approve bookings.
+     *
+     * @param Request $request
+     * @return JsonResponse
      */
     public function bulkApprove(Request $request): JsonResponse
     {
         $user = Auth::user();
-        if (!$user || !$user->user_type != 'admin') {
+        if (!$user || !($user->user_type === 'admin' || $user->role?->name === 'admin')) {
             return response()->json([
                 'success' => false,
                 'message' => 'Unauthorized access'
             ], 403);
         }
-        // Validate request data
+
         try {
             $request->validate([
                 'booking_ids' => 'required|array|min:1',
@@ -323,37 +307,27 @@ class BookingApprovalController extends Controller
                 'notes' => 'nullable|string|max:500'
             ]);
 
-            DB::beginTransaction();
+            $result = $this->bookingApprovalService->bulkApproveBookings(
+                $request->booking_ids,
+                $user->id,
+                $request->notes ?? null
+            );
 
-            $bookings = Booking::whereIn('id', $request->booking_ids)
-                ->where('status', 'pending')
-                ->get();
-
-            if ($bookings->count() !== count($request->booking_ids)) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Some bookings are not pending or do not exist'
-                ], 400);
+            // Determine appropriate status code based on partial success or full failure
+            $statusCode = 200; // Default to OK
+            if ($result['total_requested'] > 0 && $result['approved_count'] === 0) {
+                $statusCode = 400; // All failed
+            } elseif ($result['approved_count'] > 0 && $result['approved_count'] < $result['total_requested']) {
+                $statusCode = 207; // Partial Content (Multi-Status) - if API client understands it, otherwise 200
             }
 
-            $bookings->each(function ($booking) use ($request) {
-                $booking->update([
-                    'status' => 'approved',
-                    'approved_by' => Auth::id(),
-                    'approved_at' => now(),
-                    'admin_notes' => $request->notes
-                ]);
-            });
-
-            Log::info("Bulk approval of " . $bookings->count() . " bookings by admin " . Auth::id());
-
-            DB::commit();
-
             return response()->json([
-                'success' => true,
-                'data' => ['approved_count' => $bookings->count()],
-                'message' => "Successfully approved {$bookings->count()} bookings"
-            ]);
+                'success' => true, // Or false if all failed
+                'data' => $result,
+                'message' => $result['approved_count'] > 0
+                    ? "Successfully approved {$result['approved_count']} bookings. " . (count($result['errors']) > 0 ? "Errors occurred for some: " . implode(', ', $result['errors']) : '')
+                    : (count($result['errors']) > 0 ? "No bookings approved. Errors: " . implode(', ', $result['errors']) : 'No bookings were selected or are pending for approval.'),
+            ], $statusCode);
 
         } catch (ValidationException $e) {
             return response()->json([
@@ -361,12 +335,16 @@ class BookingApprovalController extends Controller
                 'message' => 'Validation failed',
                 'errors' => $e->errors()
             ], 422);
-        } catch (\Exception $e) {
-            DB::rollBack();
-            Log::error('Error in bulk approval: ' . $e->getMessage());
+        } catch (BookingApprovalException $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to approve bookings'
+                'message' => $e->getMessage()
+            ], $e->getCode() ?: 400);
+        } catch (\Exception $e) {
+            Log::error('BookingApprovalController@bulkApprove failed: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to process bulk approval.'
             ], 500);
         }
     }

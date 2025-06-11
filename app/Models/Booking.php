@@ -134,7 +134,10 @@ class Booking extends Model
     public const STATUS_APPROVED = 'approved';
     public const STATUS_REJECTED = 'rejected';
     public const STATUS_CANCELLED = 'cancelled';
-    public const STATUS_PREEMPTED = 'preempted'; // New status
+    public const STATUS_PREEMPTED = 'preempted';
+    public const STATUS_COMPLETED = 'completed';
+    public const STATUS_IN_USE = 'in_use'; 
+    public const STATUS_EXPIRED = 'expired'; 
 
     /**
      * Get the user that owns the booking.
