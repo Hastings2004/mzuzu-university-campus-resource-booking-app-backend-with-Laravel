@@ -79,11 +79,9 @@ class BinarySearchController extends Controller
         
         $request->validate([
             'query' => 'required|string|min:1',
-            // Optional additional filters (resource_type, start_time, end_time, user_id)
-            'resource_type' => 'nullable|string',
             'start_time' => 'nullable|date',
             'end_time' => 'nullable|date|after_or_equal:start_time',
-            'user_id' => 'nullable|integer|exists:users,id', // Validate if user_id is provided
+            'user_id' => 'nullable|integer|exists:users,id', 
         ]);
 
         $query = $request->input('query');
