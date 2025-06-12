@@ -111,7 +111,7 @@ class BookingController extends Controller
                 'status' => $booking->status,
                 'purpose' => $booking->purpose,
                 'booking_type' => $booking->booking_type,                
-                //'priority' => $priorityLevelToStringMap[$booking->priority_level] ?? 'unknown',
+                'priority' => $priorityLevelToStringMap[$booking->priority_level] ?? 'unknown',
                 'created_at' => $booking->created_at ? $booking->created_at->toISOString() : null,
                 'updated_at' => $booking->updated_at ? $booking->updated_at->toISOString() : null,
                 'resource' => $booking->resource ? [
