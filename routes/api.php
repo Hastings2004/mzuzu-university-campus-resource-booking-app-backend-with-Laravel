@@ -36,6 +36,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/bookings/{booking}/can-cancel', [BookingController::class, 'checkCancellationEligibility']);
     Route::post('/reservations', [Reservation::class, 'store']); 
 
+
+    Route::get('/search/global', [BinarySearchController::class, 'globalSearch']);
+
+
     // Route::get('/email/verify', [AuthController::class, 'verifyNotice']); // Throttle to prevent abuse
 
     // Route::get('/email/verify/{id}/{hash}', [AuthController::class, 'verifyEmail'])->middleware(['signed', 'throttle:6,1'])->name('verification.verify');

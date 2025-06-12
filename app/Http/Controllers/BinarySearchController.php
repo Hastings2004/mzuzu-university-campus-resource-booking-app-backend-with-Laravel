@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Services\BinarySearchService;
 use App\Http\Requests\BinarySearchRequest; // Assuming this Request handles validation correctly
+use Illuminate\Support\Facades\Auth; // Import Auth facade
 
 class BinarySearchController extends Controller
 {
@@ -13,20 +14,21 @@ class BinarySearchController extends Controller
     public function __construct(BinarySearchService $searchService)
     {
         $this->searchService = $searchService;
+        // Optionally apply middleware if you want to restrict search access
+        // $this->middleware('auth:sanctum');
     }
 
     /**
      * Single type search (e.g., search resources by name)
      * Expects: ?type=resources&query=laptop&field=name
+     * NOTE: Frontend's global search will primarily hit `globalSearch` now.
      */
     public function search(BinarySearchRequest $request)
     {
-        // BinarySearchRequest should validate 'type', 'query', and 'field'
-        $type = $request->input('type'); // NOW UNCOMMENTED AND USED!
+        $type = $request->input('type');
         $query = $request->input('query');
-        $field = $request->input('field', 'name'); // Default to 'name' if not provided
+        $field = $request->input('field', 'name');
 
-        // Correctly call the service method with all required arguments
         $results = $this->searchService->search($type, $query, $field);
 
         return response()->json([
@@ -41,24 +43,21 @@ class BinarySearchController extends Controller
     /**
      * Multi-field search within a single type (e.g., search users by first_name OR email)
      * Expects: ?type=users&query=john&fields[]=first_name&fields[]=email
+     * This method is called by `globalSearch` internally.
      */
     public function multiFieldSearch(Request $request)
     {
-        // We'll use Request validation here, but you could create a specific FormRequest for this too.
         $request->validate([
-            //'type' => 'required|string|in:resources,bookings,users', // Type is essential here
             'query' => 'required|string|min:1',
             'fields' => 'nullable|array',
-            'fields.*' => 'string' // Ensure each field name in the array is a string
+            'fields.*' => 'string'
         ]);
 
-        $type = $request->input('type');
+        $type = $request->input('type'); // Passed internally from globalSearch or directly as query param
         $query = $request->input('query');
         $fields = $request->input('fields', []);
 
         // The type hinting for multiFieldSearch expects string $query, array $fields.
-        // The error you had previously was likely from a variable holding an array being passed to $query.
-        // Now, we're ensuring $query is a string from the validation.
         $results = $this->searchService->multiFieldSearch($type, $query, $fields);
 
         return response()->json([
@@ -72,55 +71,82 @@ class BinarySearchController extends Controller
 
     /**
      * Global search across all predefined types (resources, bookings, users)
-     * Expects: ?query=keyword
+     * Expects: ?query=keyword&resource_type=...&start_time=...&end_time=...&user_id=...
      */
     public function globalSearch(Request $request)
     {
+        $user = Auth::user(); // Get the authenticated user
+        
         $request->validate([
             'query' => 'required|string|min:1',
-            // No 'types' parameter validation needed here, as it's hardcoded to all
+            // Optional additional filters (resource_type, start_time, end_time, user_id)
+            'resource_type' => 'nullable|string',
+            'start_time' => 'nullable|date',
+            'end_time' => 'nullable|date|after_or_equal:start_time',
+            'user_id' => 'nullable|integer|exists:users,id', // Validate if user_id is provided
         ]);
 
         $query = $request->input('query');
-        // Correctly define the array of types to loop through
-        $types = ['resources', 'bookings', 'users']; // Fixed this line
-
         $allResults = collect();
 
-        foreach ($types as $type) {
-            // Call multiFieldSearch for each type, letting it use default fields for that type
-            $results = $this->searchService->multiFieldSearch($type, $query);
+        // Determine which types to search based on user role
+        $typesToSearch = ['resources', 'bookings'];
+        if ($user && ($user->user_type === 'admin' || $user->role?->name === 'admin')) {
+            $typesToSearch[] = 'users'; // Add 'users' only for admins
+        }
+
+        // Extract additional filters from the request
+        $resourceTypeFilter = $request->input('resource_type');
+        $startTimeFilter = $request->input('start_time');
+        $endTimeFilter = $request->input('end_time');
+        $userIdFilter = $request->input('user_id');
+
+        foreach ($typesToSearch as $type) {
+            // Pass the extracted filters to the service if relevant
+            $filters = [];
+            if ($type === 'resources' && $resourceTypeFilter) {
+                $filters['type'] = $resourceTypeFilter;
+            }
+            if ($type === 'bookings') {
+                if ($startTimeFilter) $filters['start_time'] = $startTimeFilter;
+                if ($endTimeFilter) $filters['end_time'] = $endTimeFilter;
+                if ($userIdFilter) $filters['user_id'] = $userIdFilter;
+            }
+            if ($type === 'users' && $userIdFilter) { // For users, if user_id filter is passed
+                 $filters['id'] = $userIdFilter; // Filter users by ID
+            }
+
+
+            // Call multiFieldSearch for each type, and pass specific filters
+            // Assuming multiFieldSearch handles default fields if not provided
+            $results = $this->searchService->multiFieldSearch($type, $query, $filters);
             $allResults = $allResults->merge($results);
         }
 
-        // It's often useful to ensure unique results across types if IDs could overlap
-        
         $uniqueResults = $allResults->unique(function ($item) {
-             return $item['type'] . '-' . $item['id'];
+            return ($item['type'] ?? 'unknown') . '-' . ($item['id'] ?? uniqid()); // Handle potential missing type/id for robustness
         });
 
         return response()->json([
             'query' => $query,
-            'types_searched' => $types, // Renamed for clarity
+            'types_searched' => $typesToSearch,
             'total_count' => $uniqueResults->count(),
             'results_by_type' => [
                 'resources' => $uniqueResults->where('type', 'resources')->values(),
                 'bookings' => $uniqueResults->where('type', 'bookings')->values(),
-                'users' => $uniqueResults->where('type', 'users')->values()
+                'users' => $uniqueResults->where('type', 'users')->values() // Will be empty for non-admins
             ]
         ]);
     }
 
     /**
      * Clear search cache
-     * Expects: ?type=resources&field=name OR no params to clear all
      */
     public function clearCache(Request $request)
     {
         $type = $request->input('type');
         $field = $request->input('field');
 
-        // Pass nulls if not provided to clear all specific caches
         $this->searchService->clearCache($type, $field);
 
         return response()->json([
