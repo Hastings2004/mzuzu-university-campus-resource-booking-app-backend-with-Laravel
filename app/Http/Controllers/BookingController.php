@@ -37,7 +37,7 @@ class BookingController extends Controller
             return response()->json(['message' => 'Unauthenticated.'], 401);
         }
 
-        $query = $request-> $user->bookings()->with(['resource', 'user']);
+        $query = $user->bookings()->with(['resource', 'user']);
 
         // Admin can see all bookings
         if ($user->user_type === 'admin') {

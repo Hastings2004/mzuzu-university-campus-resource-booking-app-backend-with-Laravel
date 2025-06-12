@@ -15,7 +15,7 @@ class DashboardController extends Controller
 
     public function __construct(DashboardService $dashboardService)
     {
-        parent::__construct();
+        //$this->middleware('auth:sanctum'); // Uncomment if you want to apply auth middleware to all methods
         $this->dashboardService = $dashboardService;
         
 
