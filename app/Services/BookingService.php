@@ -556,7 +556,7 @@ class BookingService
         }
 
         // Check duration constraints
-        $durationInMinutes = $endTime->diffInMinutes($startTime);
+        $durationInMinutes = $startTime->diffInMinutes($endTime);
 
         if ($durationInMinutes < self::MIN_DURATION_MINUTES) {
             throw new BookingException('Booking duration must be at least ' . self::MIN_DURATION_MINUTES . ' minutes.');
@@ -682,7 +682,7 @@ class BookingService
                 "status" => self::STATUS_APPROVED, // New high-priority booking is approved immediately
                 "purpose" => $data['purpose'] ?? null,
                 "booking_type" => $data['booking_type'],
-                "priority_level" => $newBookingPriority, // Store the determined priority level
+                "priority" => $newBookingPriority, // Store the determined priority level
             ]);
 
             // Notify the user who made the new booking
