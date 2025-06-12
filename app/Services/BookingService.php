@@ -28,6 +28,7 @@ class BookingService
     const STATUS_COMPLETED = 'completed';
     const STATUS_IN_USE = 'in_use'; 
     const STATUS_PREEMPTED = 'preempted'; 
+    const STATUS_EXPIRED = 'expired';
 
     /**
      * Assigns priority level based on user type and booking type.
@@ -185,7 +186,7 @@ class BookingService
     {
         DB::beginTransaction();
 
-        try {
+        //try {
             $resource = $this->validateResource($data['resource_id']);
             $startTime = Carbon::parse($data['start_time']);
             $endTime = Carbon::parse($data['end_time']);
@@ -196,6 +197,7 @@ class BookingService
 
             $newBookingPriority = $this->determinePriority($user, $data['booking_type']);
 
+            // Check if the user has exceeded their booking limit
             $conflictingBookings = $this->findConflictingBookings(
                 $data['resource_id'],
                 $startTime,
@@ -262,15 +264,15 @@ class BookingService
                 'status_code' => 201
             ];
 
-        } catch (BookingException $e) {
-            DB::rollBack();
-            Log::warning('Booking validation failed: ' . $e->getMessage(), ['user_id' => $user->id ?? 'guest']);
-            return ['success' => false, 'message' => $e->getMessage(), 'status_code' => 400]; // Bad Request for validation errors
-        } catch (\Exception $e) {
-            DB::rollBack();
-            Log::error('Booking creation failed: ' . $e->getMessage(), ['trace' => $e->getTraceAsString(), 'user_id' => $user->id ?? 'guest']);
-            return ['success' => false, 'message' => 'An unexpected error occurred while creating the booking.', 'status_code' => 500];
-        }
+        // } catch (BookingException $e) {
+        //     DB::rollBack();
+        //     Log::warning('Booking validation failed: ' . $e->getMessage(), ['user_id' => $user->id ?? 'guest']);
+        //     return ['success' => false, 'message' => $e->getMessage(), 'status_code' => 400]; // Bad Request for validation errors
+        // } catch (\Exception $e) {
+        //     DB::rollBack();
+        //     Log::error('Booking creation failed: ' . $e->getMessage(), ['trace' => $e->getTraceAsString(), 'user_id' => $user->id ?? 'guest']);
+        //     return ['success' => false, 'message' => 'An unexpected error occurred while creating the booking.', 'status_code' => 500];
+        // }
     }
 
     /**
@@ -587,5 +589,33 @@ class BookingService
             Log::error('Availability check failed: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
             return ['available' => false, 'hasConflict' => true, 'message' => 'An unexpected error occurred during availability check.', 'conflicts' => []];
         }
+    }
+
+    /**
+     * Marks bookings as 'expired' if their end time has passed.
+     * This function should ideally be run as a scheduled task (e.g., daily or hourly).
+     *
+     * @return int The number of bookings that were marked as expired.
+     */
+    public function markExpiredBookings(): int
+    {
+        $now = Carbon::now();
+
+        // Query for bookings that have ended and are not already in a final state
+        // We exclude cancelled, preempted, completed, and already expired bookings
+        $updatedCount = Booking::where('end_time', '<', $now)
+            ->whereNotIn('status', [
+                self::STATUS_CANCELLED,
+                self::STATUS_PREEMPTED,
+                self::STATUS_COMPLETED,
+                self::STATUS_EXPIRED // Exclude already expired bookings
+            ])
+            ->update(['status' => self::STATUS_EXPIRED]);
+
+        if ($updatedCount > 0) {
+            Log::info("{$updatedCount} bookings marked as expired.");
+        }
+
+        return $updatedCount;
     }
 }
