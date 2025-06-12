@@ -30,6 +30,7 @@ class BookingController extends Controller
      * @param Request $request
      * @return JsonResponse
      */
+    
     public function index(Request $request): JsonResponse
     {
         $user = Auth::user();
@@ -37,108 +38,121 @@ class BookingController extends Controller
             return response()->json(['message' => 'Unauthenticated.'], 401);
         }
 
-        $query = $user->bookings()->with(['resource', 'user']);
-
-        // Admin can see all bookings
+        // Base query - Admin sees all, regular user sees their own
         if ($user->user_type === 'admin') {
-            $query = Booking::with(['resource', 'user']); // Admin sees all bookings
-
+            $query = Booking::with(['resource', 'user']);
         } else {
-            // Regular users only see their own future/active bookings
-            $query->where('end_time', '>', Carbon::now())
-                  ->whereIn('status', [
-                      BookingService::STATUS_PENDING,
-                      BookingService::STATUS_APPROVED,
-                      BookingService::STATUS_IN_USE
-                  ]);
+            // Regular users see only their own bookings
+            $query = $user->bookings()->with(['resource', 'user']);
         }
 
-        // Apply filters
-        if ($request->has('status') && in_array($request->query('status'), [
-            BookingService::STATUS_PENDING,
-            BookingService::STATUS_APPROVED,
-            BookingService::STATUS_REJECTED,
-            BookingService::STATUS_CANCELLED,
-            BookingService::STATUS_COMPLETED,
-            BookingService::STATUS_IN_USE,
-            BookingService::STATUS_PREEMPTED,
-        ])) {
-            $query->where('status', $request->query('status'));
+        // 1. Apply Status Filter (for both admin and regular users)
+        $requestedStatus = $request->query('status');
+        $allowedStatuses = [
+            'pending',
+            'approved',
+            'rejected',
+            'cancelled',
+            'completed',
+            'in_use',
+            'expired',
+            'preempted'
+        ]; // Assuming these are your valid statuses
+
+        if ($requestedStatus && $requestedStatus !== 'all' && in_array($requestedStatus, $allowedStatuses)) {
+            $query->where('status', $requestedStatus);
         }
 
-        // Apply priority filter (if 'priority_level' exists on Booking model)
-        if ($request->has('priority_level')) {
-            $priorityValue = (int) $request->query('priority_level'); // Cast to int
-            $query->where('priority_level', $priorityValue);
+        // Map frontend string priority to backend integer priority_level
+        $priorityMap = [
+            'low' => 1,    
+            'medium' => 2, 
+            'high' => 3,   
+        ];
+
+        $requestedPriority = $request->query('priority'); // Frontend sends 'priority'
+        if ($requestedPriority && $requestedPriority !== 'all' && isset($priorityMap[$requestedPriority])) {
+            $query->where('priority', $priorityMap[$requestedPriority]);
         }
 
+        // 2. Apply Date Range Filter (for both admin and regular users)
 
-        // Apply sorting
-        $sortBy = $request->query('sort_by', 'start_time'); // Default sort by start_time
-        $sortOrder = $request->query('order', 'asc'); // Default order ascending
+        $sortBy = $request->query('sort_by', 'created_at'); // Default to 'created_at' for 'Newest First'
+        $sortOrder = $request->query('order', 'desc'); // Default to 'desc' for 'Newest First'
 
         // Whitelist allowed sort columns to prevent SQL injection
-        $allowedSortColumns = ['start_time', 'end_time', 'created_at', 'status', 'priority_level'];
+        $allowedSortColumns = ['start_time', 'end_time', 'created_at', 'status', 'priority'];
         if (!in_array($sortBy, $allowedSortColumns)) {
-            $sortBy = 'start_time'; // Fallback to safe default
+            $sortBy = 'created_at'; // Fallback to safe default
         }
 
         // Sanitize sort order
-        $sortOrder = in_array(strtolower($sortOrder), ['asc', 'desc']) ? strtolower($sortOrder) : 'asc';
+        $sortOrder = in_array(strtolower($sortOrder), ['asc', 'desc']) ? strtolower($sortOrder) : 'desc'; // Default to 'desc'
 
-        $bookings = $query->orderBy($sortBy, $sortOrder)->get();
+        $query->orderBy($sortBy, $sortOrder);
 
-        if( $bookings->isEmpty()) {
-            return response()->json(['message' => 'No bookings found.'], 404);
-        }
-        // Return bookings with resource and user info
 
-        if ($user->user_type === 'admin') {
-            return response()->json([
-                'success' => true,
-                'bookings' => $bookings
-            ]);
-            
-        } else {
+        // 4. Implement Pagination (as discussed in previous interaction, good for 15 bookings per page)
+        $perPage = (int) $request->query('per_page', 15); // Default 15 bookings per page
+        $bookings = $query->paginate($perPage);
+
+        // Map integer priority_level to string priority for frontend response
+        $priorityLevelToStringMap = array_flip($priorityMap); // Invert the map for response
+
+        // Prepare bookings data for consistent frontend consumption
+        $formattedBookings = $bookings->getCollection()->map(function ($booking) use ($priorityLevelToStringMap) {
+            return [
+                'id' => $booking->id,
+                'booking_reference' => $booking->booking_reference,
+                'user_id' => $booking->user_id,
+                'resource_id' => $booking->resource_id,
+                'start_time' => $booking->start_time ? $booking->start_time->toISOString() : null,
+                'end_time' => $booking->end_time ? $booking->end_time->toISOString() : null,
+                'status' => $booking->status,
+                'purpose' => $booking->purpose,
+                'booking_type' => $booking->booking_type,                
+                //'priority' => $priorityLevelToStringMap[$booking->priority_level] ?? 'unknown',
+                'created_at' => $booking->created_at ? $booking->created_at->toISOString() : null,
+                'updated_at' => $booking->updated_at ? $booking->updated_at->toISOString() : null,
+                'resource' => $booking->resource ? [
+                    'id' => $booking->resource->id,
+                    'name' => $booking->resource->name,
+                    'location' => $booking->resource->location ?? 'Unknown Location',
+                    'description' => $booking->resource->description,
+                    'capacity' => $booking->resource->capacity,
+                    'type' => $booking->resource->type ?? null,
+                    'is_active' => $booking->resource->is_active ?? null,
+                ] : null,
+                // Ensure 'user' is always available, even if null for some reason (though it shouldn't be for bookings)
+                'user' => $booking->user ? [
+                    'id' => $booking->user->id,
+                    'first_name' => $booking->user->first_name ?? 'N/A',
+                    'last_name' => $booking->user->last_name ?? 'N/A',
+                    'email' => $booking->user->email ?? 'N/A',
+                    'user_type' => $booking->user->user_type ?? $booking->user->role?->name ?? 'N/A', // Prioritize user_type, fallback to role name
+                ] : null
+            ];
+        });
+
+        // Log for regular user (optional, as you had it)
+        if ($user->user_type !== 'admin') {
             Log::info('User retrieved their bookings.', ['user_id' => $user->id]);
         }
+
+        // Return paginated data
         return response()->json([
             'success' => true,
-            "bookings" => $bookings->map(function ($booking) {
-                // Ensure all dates are ISO strings for consistency
-                return [
-                    'id' => $booking->id,
-                    'booking_reference' => $booking->booking_reference,
-                    'user_id' => $booking->user_id,
-                    'resource_id' => $booking->resource_id,
-                    'start_time' => $booking->start_time->toISOString(),
-                    'end_time' => $booking->end_time->toISOString(),
-                    'status' => $booking->status,
-                    'purpose' => $booking->purpose,
-                    'booking_type' => $booking->booking_type,
-                    'priority_level' => $booking->priority_level,
-                    'created_at' => $booking->created_at->toISOString(),
-                    'resource' => [
-                        'id' => $booking->resource->id,
-                        'name' => $booking->resource->name,
-                        'location' => $booking->resource->location ?? 'Unknown Location',
-                        'description' => $booking->resource->description,
-                        'capacity' => $booking->resource->capacity,
-                        'type' => $booking->resource->type ?? null,
-                        'is_active' => $booking->resource->is_active ?? null,
-                    ],
-                    'user_info' => [ // Include user info under a nested key
-                        'id' => $booking->user->id ?? null,
-                        'first_name' => $booking->user->first_name ?? 'N/A',
-                        'last_name' => $booking->user->last_name ?? "N/A",
-                        'email' => $booking->user->email ?? 'N/A',
-                        'user_type' => $booking->user->user_type ?? $booking->user->role?->name ?? 'N/A',
-                    ]
-                ];
-            })
+            'bookings' => $formattedBookings,
+            'pagination' => [
+                'total' => $bookings->total(),
+                'per_page' => $bookings->perPage(),
+                'current_page' => $bookings->currentPage(),
+                'last_page' => $bookings->lastPage(),
+                'from' => $bookings->firstItem(),
+                'to' => $bookings->lastItem(),
+            ],
         ]);
     }
-
     /**
      * Check resource availability.
      * This method now delegates to the BookingService.
@@ -261,4 +275,63 @@ class BookingController extends Controller
             'message' => $result['message'],
         ], $result['status_code']);
     }
+
+    /**
+     * Get upcoming bookings for the authenticated user.
+     *
+     * @return JsonResponse
+     */
+    public function getUserBookings(): JsonResponse
+    {
+        $user = Auth::user();
+        if (!$user) {
+            return response()->json(['message' => 'Unauthenticated.'], 401);
+        }
+
+        // Fetch upcoming bookings for the user
+        $upcomingBookings = $user->bookings()
+            ->where('end_time', '>', Carbon::now())
+            ->with(['resource', 'user'])
+            ->orderBy('start_time', 'asc')
+            ->get();
+
+        if ($upcomingBookings->isEmpty()) {
+            return response()->json(['message' => 'No upcoming bookings found.'], 404);
+        }
+
+        return response()->json([
+            'success' => true,
+            'upcoming_bookings' => $upcomingBookings->map(function ($booking) {
+                return [
+                    'id' => $booking->id,
+                    'booking_reference' => $booking->booking_reference,
+                    'start_time' => $booking->start_time->toISOString(),
+                    'end_time' => $booking->end_time->toISOString(),
+                    'status' => $booking->status,
+                    'resource' => [
+                        'id' => $booking->resource->id,
+                        'name' => $booking->resource->name,
+                        'location' => $booking->resource->location ?? 'Unknown Location',
+                        'description' => $booking->resource->description,
+                        'capacity' => $booking->resource->capacity,
+                        'type' => $booking->resource->type ?? null,
+                        'is_active' => $booking->resource->is_active ?? null,
+                    ],
+                    'user_info' => [
+                        'id' => $booking->user->id ?? null,
+                        'first_name' => $booking->user->first_name ?? 'N/A',
+                        'last_name' => $booking->user->last_name ?? "N/A",
+                        'email' => $booking->user->email ?? 'N/A',
+                        'user_type' => $booking->user->user_type ?? $booking->user->role?->name ?? 'N/A',
+                    ]
+                ];
+            })
+        ]);
+    }
+    /**
+     * Get cancellable bookings for the authenticated user.
+     *
+     * @return JsonResponse
+     */
+    
 }

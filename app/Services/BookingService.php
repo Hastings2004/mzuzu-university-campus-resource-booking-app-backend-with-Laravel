@@ -8,11 +8,13 @@ use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Auth;
 use App\Notifications\BookingApproved;
 use App\Notifications\BookingRejected;
 use App\Notifications\BookingPreempted;
 use Illuminate\Support\Str;
 use App\Exceptions\BookingException; 
+use Illuminate\Http\Request;
 
 class BookingService
 {
@@ -618,6 +620,56 @@ class BookingService
 
         return $updatedCount;
     }
+
+    /**
+     * Get user's bookings with pagination and filtering
+     */
+    public function getUserBookings(Request $request)
+    {
+        try {
+            $perPage = min($request->get('per_page', 10), 50); // Limit per page
+            $status = $request->get('status');
+            $upcoming = $request->get('upcoming', false);
+
+            $query = $request-> user()->bookings()
+                ->with(['resource:id,name,location'])
+                ->select(['id', 'resource_id', 'start_time', 'end_time', 'status', 'purpose', 'created_at']);
+
+            if ($status) {
+                $query->where('status', $status);
+            }
+
+            if ($upcoming) {
+                $query->where('start_time', '>', now());
+            }
+
+            $bookings = $query->orderBy('start_time', 'desc')
+                ->paginate($perPage);
+
+            return response()->json([
+                'success' => true,
+                'bookings' => $bookings->items(),
+                'pagination' => [
+                    'current_page' => $bookings->currentPage(),
+                    'last_page' => $bookings->lastPage(),
+                    'per_page' => $bookings->perPage(),
+                    'total' => $bookings->total(),
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Failed to fetch user bookings', [
+                'user_id' => Auth::id(),
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch bookings'
+            ], 500);
+        }
+    }
+
 
     
 }
