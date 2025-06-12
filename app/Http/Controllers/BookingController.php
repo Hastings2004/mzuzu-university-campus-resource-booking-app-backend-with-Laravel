@@ -42,6 +42,7 @@ class BookingController extends Controller
         // Admin can see all bookings
         if ($user->user_type === 'admin') {
             $query = Booking::with(['resource', 'user']); // Admin sees all bookings
+
         } else {
             // Regular users only see their own future/active bookings
             $query->where('end_time', '>', Carbon::now())
@@ -87,6 +88,20 @@ class BookingController extends Controller
 
         $bookings = $query->orderBy($sortBy, $sortOrder)->get();
 
+        if( $bookings->isEmpty()) {
+            return response()->json(['message' => 'No bookings found.'], 404);
+        }
+        // Return bookings with resource and user info
+
+        if ($user->user_type === 'admin') {
+            return response()->json([
+                'success' => true,
+                'bookings' => $bookings
+            ]);
+            
+        } else {
+            Log::info('User retrieved their bookings.', ['user_id' => $user->id]);
+        }
         return response()->json([
             'success' => true,
             "bookings" => $bookings->map(function ($booking) {
