@@ -26,7 +26,7 @@ return new class extends Migration
                 'rejected',
                 'in user',
                 'completed'
-            ])->default('approved');
+            ])->default('pending');
             $table->string("purpose");
             $table->enum('booking_type', [
                 'university_activity',

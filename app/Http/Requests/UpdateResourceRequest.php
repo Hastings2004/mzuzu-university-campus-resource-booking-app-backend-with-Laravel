@@ -32,6 +32,7 @@ class UpdateResourceRequest extends FormRequest
             "description" => ['sometimes', 'min:15', 'max:255'],
             "location" => ['sometimes', 'min:10', 'max:100'],
             "capacity" => ['sometimes', 'min:10', 'numeric'],
+            "category"=> ['required'],
             "status" => ['sometimes', 'in:available,unavailable'],
             "image" => ['sometimes', 'min:10', 'string']
 

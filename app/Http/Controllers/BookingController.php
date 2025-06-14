@@ -44,6 +44,8 @@ class BookingController extends Controller
         } else {
             // Regular users see only their own bookings
             $query = $user->bookings()->with(['resource', 'user']);
+            $query->where('status', ['approved', 'pending']);
+            
         }
 
         // 1. Apply Status Filter (for both admin and regular users)
@@ -290,7 +292,7 @@ class BookingController extends Controller
 
         // Fetch upcoming bookings for the user
         $upcomingBookings = $user->bookings()
-            ->where('end_time', '>', Carbon::now())
+            ->where('end_time', '<', Carbon::now())
             ->with(['resource', 'user'])
             ->orderBy('start_time', 'asc')
             ->get();

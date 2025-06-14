@@ -87,10 +87,10 @@ class BookingService
     public function findConflictingBookings(int $resourceId, Carbon $startTime, Carbon $endTime, ?int $excludeBookingId = null): \Illuminate\Support\Collection
     {
         $query = Booking::where('resource_id', $resourceId)
-            // Consider approved, pending, and currently in-use bookings as conflicts
+            
             ->whereIn('status', [self::STATUS_PENDING, self::STATUS_APPROVED, self::STATUS_IN_USE])
             ->where(function ($q) use ($startTime, $endTime) {
-                // Check for overlapping intervals: (start_A < end_B) AND (end_A > start_B)
+                
                 $q->where('start_time', '<', $endTime)
                     ->where('end_time', '>', $startTime);
             });
@@ -126,13 +126,10 @@ class BookingService
         // Check duration constraints
         $durationInMinutes = $startTime->diffInMinutes($endTime);
 
-        if ($durationInMinutes < self::MIN_DURATION_MINUTES) {
+        if ($durationInMinutes < self::MIN_DURATION_MINUTES) { 
             throw new BookingException('Booking duration must be at least ' . self::MIN_DURATION_MINUTES . ' minutes.');
         }
 
-        if ($durationInMinutes > (self::MAX_DURATION_HOURS * 60)) {
-            throw new BookingException('Booking duration cannot exceed ' . self::MAX_DURATION_HOURS . ' hours.');
-        }
     }
 
     /**
@@ -188,7 +185,7 @@ class BookingService
     {
         DB::beginTransaction();
 
-        //try {
+        try {
             $resource = $this->validateResource($data['resource_id']);
             $startTime = Carbon::parse($data['start_time']);
             $endTime = Carbon::parse($data['end_time']);
@@ -218,7 +215,6 @@ class BookingService
             }
 
             // Check if resource capacity is exceeded by non-preemptable bookings
-            // If resource has capacity 1 and there's any non-preemptable conflict, it's a hard conflict.
             if ($resource->capacity == 1 && $nonPreemptableConflicts->isNotEmpty()) {
                 throw new BookingException('The resource is not available due to a higher or equal priority booking.');
             }
@@ -248,10 +244,10 @@ class BookingService
                 "resource_id" => $data['resource_id'],
                 "start_time" => $startTime,
                 "end_time" => $endTime,
-                "status" => self::STATUS_APPROVED, // New high-priority booking is approved immediately
+                "status" => self::STATUS_APPROVED, 
                 "purpose" => $data['purpose'] ?? null,
                 "booking_type" => $data['booking_type'],
-                "priority" => $newBookingPriority, // Store the determined priority level
+                "priority" => $newBookingPriority, 
             ]);
 
             // Notify the user who made the new booking
@@ -266,15 +262,15 @@ class BookingService
                 'status_code' => 201
             ];
 
-        // } catch (BookingException $e) {
-        //     DB::rollBack();
-        //     Log::warning('Booking validation failed: ' . $e->getMessage(), ['user_id' => $user->id ?? 'guest']);
-        //     return ['success' => false, 'message' => $e->getMessage(), 'status_code' => 400]; // Bad Request for validation errors
-        // } catch (\Exception $e) {
-        //     DB::rollBack();
-        //     Log::error('Booking creation failed: ' . $e->getMessage(), ['trace' => $e->getTraceAsString(), 'user_id' => $user->id ?? 'guest']);
-        //     return ['success' => false, 'message' => 'An unexpected error occurred while creating the booking.', 'status_code' => 500];
-        // }
+        } catch (BookingException $e) {
+            DB::rollBack();
+             Log::warning('Booking validation failed: ' . $e->getMessage(), ['user_id' => $user->id ?? 'guest']);
+             return ['success' => false, 'message' => $e->getMessage(), 'status_code' => 400]; // Bad Request for validation errors
+        } catch (\Exception $e) {
+             DB::rollBack();
+             Log::error('Booking creation failed: ' . $e->getMessage(), ['trace' => $e->getTraceAsString(), 'user_id' => $user->id ?? 'guest']);
+             return ['success' => false, 'message' => 'An unexpected error occurred while creating the booking.', 'status_code' => 500];
+        }
     }
 
     /**
@@ -565,14 +561,12 @@ class BookingService
                 ];
             }
 
-            // If there are conflicts but capacity allows, or capacity is multiple and conflicts < capacity, it's available.
-            // This method does not consider priority for "availability", only for actual booking.
-            // The priority logic is handled in `createBooking` and `updateBooking`.
+            
             return [
                 'available' => true,
                 'hasConflict' => false,
                 'message' => 'Time slot is available.',
-                'conflicts' => $conflictingBookings->map(function ($booking) { // Still return conflicts, even if available
+                'conflicts' => $conflictingBookings->map(function ($booking) { 
                     return [
                         'id' => $booking->id,
                         'start_time' => $booking->start_time->format('Y-m-d H:i'),
@@ -604,7 +598,6 @@ class BookingService
         $now = Carbon::now();
 
         // Query for bookings that have ended and are not already in a final state
-        // We exclude cancelled, preempted, completed, and already expired bookings
         $updatedCount = Booking::where('end_time', '<', $now)
             ->whereNotIn('status', [
                 self::STATUS_CANCELLED,
@@ -669,7 +662,6 @@ class BookingService
             ], 500);
         }
     }
-
 
     
 }

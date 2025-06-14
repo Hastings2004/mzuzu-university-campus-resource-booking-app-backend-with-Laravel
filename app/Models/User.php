@@ -67,6 +67,8 @@ class User extends Authenticatable
         return $this->roles->contains('name', $roleName);
     }
     
-   
+    public function notifications() : HasMany {
+        return $this->hasMany(Notification::class);
+    }  
 
 }

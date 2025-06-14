@@ -17,7 +17,8 @@ return new class extends Migration
             $table->string('description'); 
             $table->string('location'); 
             $table->integer('capacity');
-             $table->integer('is_active')->default(1); // 1 for active, 0 for inactive
+            $table->enum('category', ['classrooms', 'ict_labs', 'science_labs', 'sports','cars', 'auditorium']);
+            $table->integer('is_active')->default(1); // 1 for active, 0 for inactive
             $table->string("status")->default("Available");
             $table->string('image')->nullable(); 
             $table->timestamps();

@@ -8,6 +8,7 @@ use App\Http\Requests\UpdateResourceRequest;
 use App\Services\ResourceService; // Import the new service
 use App\Exceptions\ResourceException; // Import the custom exception
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 
@@ -29,7 +30,7 @@ class ResourceController extends Controller
      *
      * @return JsonResponse
      */
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
         // Authorization check: You might want to allow all authenticated users to view resources,
         $user = Auth::user();
@@ -39,9 +40,16 @@ class ResourceController extends Controller
                 "message" => "Unauthenticated."
             ], 401); // Unauthorized
         }
-        // If you want to restrict access to admins only, uncomment the following lines:
+
+        // Get the category from the request query parameters
+        
+        $category = $request->query('category');
+
         try {
-            $resources = $this->resourceService->getAllResources();
+            // calling resource service
+            
+            $resources = $this->resourceService->getAllResources($category);
+
             return response()->json([
                 "success" => true,
                 "resources" => $resources
@@ -50,12 +58,12 @@ class ResourceController extends Controller
             return response()->json([
                 "success" => false,
                 "message" => $e->getMessage()
-            ], $e->getCode() ?: 500); // Use specific code or default to 500
+            ], $e->getCode() ?: 500); 
         } catch (\Exception $e) {
-            Log::error('ResourceController@index failed: ' . $e->getMessage());
-            return response()->json([
-                "success" => false,
-                "message" => "An unexpected error occurred while fetching resources."
+                Log::error('ResourceController@index failed: ' . $e->getMessage());
+                return response()->json([
+                    "success" => false,
+                    "message" => "An unexpected error occurred while fetching resources."
             ], 500);
         }
     }
@@ -214,4 +222,48 @@ class ResourceController extends Controller
         }
     }
 
+    public function getResourceBookings(Request $request, $id)
+    {
+        try {
+            // Find the resource by its ID.            
+            $resource = Resource::find($id);
+
+            if (!$resource) {
+                return response()->json([
+                    'message' => 'Resource not found.'
+                ], 404);
+            }
+
+           
+            // bookings for this specific resource.
+            // For example, if only resource owners or admins can see all bookings:
+             if (!Auth::user()) {
+                 return response()->json([
+                    'message' => 'Unauthorized to view bookings for this resource.'
+               ], 403);
+            }
+
+            // Load the bookings associated with the resource.
+           
+            $bookings = $resource->bookings()->get();
+
+            // Return the bookings as a JSON response.
+            
+            return response()->json([
+                'bookings' => $bookings
+            ], 200);
+
+        } catch (\Exception $e) {
+            // Log the error for debugging purposes
+            Log::error("Error fetching resource bookings for ID {$id}: " . $e->getMessage());
+
+            // Return a generic error response
+            return response()->json([
+                'message' => 'An error occurred while fetching bookings.',
+                'error' => $e->getMessage() // You might remove this in production for security
+            ], 500);
+        }
+    }
+
+    
 }

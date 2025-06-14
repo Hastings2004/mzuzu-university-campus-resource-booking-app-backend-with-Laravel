@@ -17,6 +17,7 @@ class Resource extends Model
         'description',
         'location',
         'capacity',
+        'category',
         'status',
     ];
 

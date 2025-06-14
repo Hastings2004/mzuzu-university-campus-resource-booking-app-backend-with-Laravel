@@ -16,10 +16,19 @@ class ResourceService
      *
      * @return Collection<Resource>
      */
-    public function getAllResources(): Collection
+    public function getAllResources(?string $category = null): Collection
     {
         try {
-            return Resource::all();
+            $query = Resource::query(); 
+
+            // If a category is provided and it's not 'all' (or null, if 'all' is handled explicitly in frontend)
+            if ($category && $category !== 'all') {
+                $query->where('category', $category);
+            }
+
+            $query->orderBy('name');
+
+            return $query->get(); 
         } catch (Throwable $e) {
             Log::error('Failed to fetch all resources: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
             throw new ResourceException('Could not retrieve resources.');

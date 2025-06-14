@@ -248,7 +248,7 @@ class BookingApprovalService
 
         try {
             $bookingsToApprove = Booking::whereIn('id', $bookingIds)
-                ->where('status', Booking::STATUS_PENDING) // Only pending bookings can be bulk approved
+                ->where('status', Booking::STATUS_PENDING) 
                 ->get();
 
             // Check if all requested IDs are pending and exist
@@ -258,12 +258,6 @@ class BookingApprovalService
                 foreach ($missingOrNonPendingIds as $id) {
                     $errors[] = "Booking #{$id} is not pending or does not exist.";
                 }
-                // If there are issues, we can either rollback the entire transaction
-                // or proceed with valid ones and report errors. Given the original
-                // controller's behavior, it seems to imply an "all or nothing" for the bulk
-                // if there are *any* non-pending/missing.
-                // For robustness, I'll allow partial success if some are valid.
-                // If you prefer strict all-or-nothing, throw exception here.
             }
 
             foreach ($bookingsToApprove as $booking) {
